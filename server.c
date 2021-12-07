@@ -126,10 +126,9 @@ void post_save(int fd, char *body)
   } else {
     status = "error";
   }
- 
-  sprintf(response_body, "{\"status\":\"%s\"}", status);
 
-  send_response(fd, "HTTP/1.1 200 OK", "application/json", response_body,sizeof(response_body));
+
+  send_response(fd, "HTTP/1.1 201 Created", "application/json", response_body,sizeof(response_body));
 }
 
 char *strlower(char *s)
@@ -243,7 +242,7 @@ int main() {
     
    address.sin_family = AF_INET;    
    address.sin_addr.s_addr = INADDR_ANY;    
-   address.sin_port = htons(8080);    
+   address.sin_port = htons(80);    
     
 
    if (bind(create_socket, (struct sockaddr *) &address, sizeof(address)) == 0){    
@@ -254,7 +253,6 @@ int main() {
     }    
     
    while (1) {  
-       
      
       if ((new_socket = accept(create_socket, (struct sockaddr *) &address, &addrlen)) < 0) {    
          perror("server: accept");    
