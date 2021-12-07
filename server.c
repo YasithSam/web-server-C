@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -27,18 +26,15 @@ struct file_data *file_load(char *filename)
     struct stat buf;
     int bytes_read, bytes_remaining, total_bytes = 0;
 
-    // Get the file size
     if (stat(filename, &buf) == -1) {
         return NULL;
     }
 
-    // Make sure it's a regular file
     if (!(buf.st_mode & S_IFREG)) {
         return NULL;
     }
 
-    // Open the file for reading
-    FILE *fp = fopen(filename, "rb");
+    FILE *fp = fopen(filename, "r");
 
     if (fp == NULL) {
         return NULL;
@@ -100,17 +96,16 @@ void send_response(int fd, char *header, char *content_type, void *body, int con
       header, content_length, content_type, asctime(localtime(&rawtime)));
 
     memcpy(response+r, body, content_length);
-    write(fd,response,content_length+r);
+    send(fd,response,content_length+r,0);
   
 }
 
 
-void post_save(int fd, char *body)
+void post_request(int fd, char *body)
 {
 
   char response_body[1024];
   char *status;
-
 
   int fp = open("post.text", O_CREAT|O_WRONLY, 0644);
 
@@ -127,7 +122,6 @@ void post_save(int fd, char *body)
     status = "error";
   }
 
-
   send_response(fd, "HTTP/1.1 201 Created", "application/json", response_body,sizeof(response_body));
 }
 
@@ -140,7 +134,7 @@ char *strlower(char *s)
     return s;
 }
 
-char *mime_type_get(char *filename)
+char *file_type_get(char *filename)
 {
     char *ext = strrchr(filename, '.');
 
@@ -154,12 +148,13 @@ char *mime_type_get(char *filename)
 
     if (strcmp(ext, "html") == 0 || strcmp(ext, "htm") == 0) { return "text/html"; }
     if (strcmp(ext, "jpeg") == 0 || strcmp(ext, "jpg") == 0) { return "image/jpg"; }
-    if (strcmp(ext, "css") == 0) { return "text/css"; }
-    if (strcmp(ext, "js") == 0) { return "application/javascript"; }
-    if (strcmp(ext, "json") == 0) { return "application/json"; }
     if (strcmp(ext, "txt") == 0) { return "text/plain"; }
     if (strcmp(ext, "gif") == 0) { return "image/gif"; }
     if (strcmp(ext, "png") == 0) { return "image/png"; }
+    if (strcmp(ext, "css") == 0) { return "text/css"; }
+    if (strcmp(ext, "js") == 0) { return "application/javascript"; }
+    if (strcmp(ext, "json") == 0) { return "application/json"; }
+
 
     return DEFAULT_MIME_TYPE;
 }
@@ -179,7 +174,7 @@ char *find_end_of_header(char *header)
   return nl;
 }
 
-void get_file(int fd, char *request_path)
+void load_file(int fd, char *request_path)
 {    
     char filepath[4096];
     struct file_data *filedata;
@@ -187,7 +182,7 @@ void get_file(int fd, char *request_path)
 
     snprintf(filepath, sizeof(filepath), "%s%s", SERVER_ROOT, request_path);
     filedata = file_load(filepath);
-    mime_type = mime_type_get(filepath);
+    mime_type = file_type_get(filepath);
     if(filedata==NULL){
         filedata = file_load("./root/404.html");
         send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data,filedata->size);
@@ -200,13 +195,13 @@ void get_file(int fd, char *request_path)
     file_free(filedata);
 }
 
-void handle_http_request(int fd)
+void handle_http_request(int d)
 {
     const int request_buffer_size = 65536; 
     char request[request_buffer_size];
-     char *p;
+    char *p;
 
-    int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
+    int bytes_recvd = recv(d, request, request_buffer_size - 1, 0);
 
     if (bytes_recvd < 0) {
         perror("recv");
@@ -219,10 +214,10 @@ void handle_http_request(int fd)
     p = find_end_of_header(request); 
 
     if(strcmp(method, "GET") == 0) {
-          get_file(fd,path);
+          load_file(d,path);
     }
     else{
-        post_save(fd,p);
+        post_request(d,p);
     }
  
 
@@ -230,45 +225,42 @@ void handle_http_request(int fd)
 
     
 int main() {    
-   int create_socket, new_socket;    
+   int client_socket, server_socket;    
    socklen_t addrlen;    
    int bufsize = 1024;    
    char *buffer = malloc(bufsize);    
    struct sockaddr_in address;    
  
-   if ((create_socket = socket(AF_INET, SOCK_STREAM, 0)) > 0){    
+   if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) > 0){    
       printf("The socket was created\n");
    }
     
    address.sin_family = AF_INET;    
    address.sin_addr.s_addr = INADDR_ANY;    
-   address.sin_port = htons(80);    
+   address.sin_port = htons(8080);    
     
 
-   if (bind(create_socket, (struct sockaddr *) &address, sizeof(address)) == 0){    
+   if (bind(client_socket, (struct sockaddr *) &address, sizeof(address)) == 0){    
       printf("Binding Socket\n");
    }
-    if (listen(create_socket, 50) < 0) {    
+    if (listen(client_socket, 50) < 0) {    
          perror("server: listen");      
     }    
     
    while (1) {  
      
-      if ((new_socket = accept(create_socket, (struct sockaddr *) &address, &addrlen)) < 0) {    
+      if ((server_socket = accept(client_socket, (struct sockaddr *) &address, &addrlen)) < 0) {    
          perror("server: accept");    
       }    
     
-      if (new_socket > 0){    
+      if (server_socket > 0){    
          printf("The Client is connected...\n");
       }
             
-      handle_http_request(new_socket);
-      close(new_socket); 
+      handle_http_request(server_socket);
+      close(server_socket); 
     
     
    }   
-     
-   
-   
    return 0;    
 }
