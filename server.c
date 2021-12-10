@@ -248,7 +248,6 @@ int main() {
     }    
     
    while (1) {  
-     
       if ((server_socket = accept(client_socket, (struct sockaddr *) &address, &addrlen)) < 0) {    
          perror("server: accept");    
       }    
